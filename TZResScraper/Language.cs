@@ -1,8 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace TZResScraper
 {
@@ -10,6 +7,9 @@ namespace TZResScraper
     {
         public ushort LCID { get; set; }
         public string Name { get; set; }
-        public Dictionary<uint, string> StringTable { get; } = new Dictionary<uint, string>();
+        public Dictionary<string, TimeZoneInfoEx> TimeZones { get; } = new Dictionary<string, TimeZoneInfoEx>();
+
+        [JsonIgnore]
+        internal Dictionary<uint, string> StringTable { get; } = new Dictionary<uint, string>();
     }
 }

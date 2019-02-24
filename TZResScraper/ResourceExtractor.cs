@@ -9,7 +9,6 @@ namespace TZResScraper
     class ResourceExtractor
     {
         private readonly Dictionary<ushort, Language> Languages;
-        public bool ChangeFound { get; private set; } = false;
 
         public ResourceExtractor(Dictionary<ushort, Language> languages)
         {
@@ -24,7 +23,7 @@ namespace TZResScraper
                 if (module == IntPtr.Zero) throw new Win32Exception();
                 if (!EnumResourceNames(module, (IntPtr)RT_STRING, new EnumResNameProc(EnumNamesFunc), IntPtr.Zero))
                     throw new Win32Exception();
-                return ChangeFound;
+                return true;
             }
             catch (Win32Exception ex)
             {
@@ -95,13 +94,8 @@ namespace TZResScraper
                     Name = name.ToString(),
                 };
                 Languages.Add(wLang, lang);
-                ChangeFound = true;
             }
-            if (!lang.StringTable.ContainsKey(uId) || lang.StringTable[uId] != str)
-            {
-                lang.StringTable[uId] = str;
-                ChangeFound = true;
-            }
+            lang.StringTable[uId] = str;
         }
 
         private const int RT_STRING = 6;

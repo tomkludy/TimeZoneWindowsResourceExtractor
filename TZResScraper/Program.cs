@@ -1,17 +1,18 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 
 namespace TZResScraper
 {
-    class Program
+    partial class Program
     {
         readonly static Dictionary<ushort, Language> Languages = new Dictionary<ushort, Language>();
         static string TZResDLL = @"C:\windows\system32\tzres.dll";
-        static string OutputFile = "tzres.json";
+        static string OutputFile = "tzinfo.json";
         static bool WriteOutput = true;
 
         static void Main(string[] args)
@@ -32,7 +33,49 @@ namespace TZResScraper
 
             var extractor = new ResourceExtractor(Languages);
             extractor.Extract(TZResDLL);
-            if (!extractor.ChangeFound)
+
+            // Now, match resources with time zone info, building the
+            // ultimate windows TZ rosetta stone
+            var tzs = TimeZoneInfo.GetSystemTimeZones();
+            var mylang = Languages[(ushort)CultureInfo.InstalledUICulture.LCID];
+
+            // Create a reverse lookup table, while coalescing duplicate values.
+            var reverse_lookup = mylang.StringTable
+                .GroupBy(kvp => kvp.Value)
+
+                // group key is now the string in OS language;
+                // group items' keys are the index in the string table
+                // where that string was found; we only care about the
+                // first place it was found.
+                .ToDictionary(g => g.Key, g => g.First().Key);
+
+            bool changed = false;
+
+            foreach (var lang in Languages.Values.OrderBy(l => l.LCID))
+            {
+                string fix(string str) =>
+                    string.IsNullOrEmpty(str) ? str : lang.StringTable[reverse_lookup[str]];
+                foreach (var tz in tzs)
+                {
+                    var tzi = new TimeZoneInfoEx
+                    {
+                        BaseUtcOffsetMinutes = (int)tz.BaseUtcOffset.TotalMinutes,
+                        DaylightName = fix(tz.DaylightName),
+                        DisplayName = fix(tz.DisplayName),
+                        Id = tz.Id,
+                        StandardName = fix(tz.StandardName),
+                        SupportsDaylightSavingTime = tz.SupportsDaylightSavingTime,
+                    };
+
+                    if (!lang.TimeZones.ContainsKey(tzi.Id) || !lang.TimeZones[tzi.Id].Equals(tzi))
+                    {
+                        lang.TimeZones[tzi.Id] = tzi;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (!changed)
             {
                 Console.WriteLine("No changes found; nothing to write.");
             }
@@ -57,7 +100,7 @@ namespace TZResScraper
                         Console.WriteLine("Options:");
                         Console.WriteLine("-?                 Show options.");
                         Console.WriteLine("-d [path_to_dll]   Specify DLL to extract resources from.");
-                        Console.WriteLine("-j [path_to_json]  Specify JSON file to store resources in.");
+                        Console.WriteLine("-r [path_to_json]  Specify JSON file to store resources in.");
                         Console.WriteLine("-t                 Test only; don't update json file.");
                         Environment.Exit(0);
                         break;
@@ -75,7 +118,7 @@ namespace TZResScraper
                             Environment.Exit(-1);
                         }
                         break;
-                    case "-j":
+                    case "-r":
                         i++;
                         if (i >= args.Length)
                         {
@@ -119,14 +162,16 @@ namespace TZResScraper
         {
             var toplevel = new JsonFileTopLevel
             {
+                LastUpdateTime = DateTime.Now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ssZ"),
                 Languages = Languages.Values.OrderBy(l => l.LCID).ToList()
             };
-            var json = JsonConvert.SerializeObject(toplevel);
+            var json = JsonConvert.SerializeObject(toplevel, Formatting.Indented);
             File.WriteAllText(fileName, json, Encoding.UTF8);
         }
 
         class JsonFileTopLevel
         {
+            public string LastUpdateTime { get; set; }
             public List<Language> Languages { get; set; }
         }
     }
