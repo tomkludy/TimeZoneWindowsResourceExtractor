@@ -1,92 +1,133 @@
-﻿using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
+﻿using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
 
 namespace TZResScraper
 {
     class Program
     {
+        readonly static Dictionary<ushort, Language> Languages = new Dictionary<ushort, Language>();
+        static string TZResDLL = @"C:\windows\system32\tzres.dll";
+        static string OutputFile = "tzres.json";
+        static bool WriteOutput = true;
+
         static void Main(string[] args)
         {
+            ParseArgs(args);
+
+            Console.WriteLine($"Resource DLL: {TZResDLL}");
+            Console.WriteLine($"Resource JSON: {OutputFile}");
+
+            if (ReadJsonFile(OutputFile))
+            {
+                Console.WriteLine($"Read {Languages.Count} languages from {OutputFile}");
+            }
+            else
+            {
+                Console.WriteLine("JSON file does not exist");
+            }
+
+            var extractor = new ResourceExtractor(Languages);
+            extractor.Extract(TZResDLL);
+            if (!extractor.ChangeFound)
+            {
+                Console.WriteLine("No changes found; nothing to write.");
+            }
+            else if (!WriteOutput)
+            {
+                Console.WriteLine("Changes found, but not writing output based on '-t' option.");
+            }
+            else
+            {
+                WriteJsonFile(OutputFile);
+                Console.WriteLine($"Wrote {Languages.Count} languages to {OutputFile}");
+            }
+        }
+
+        private static void ParseArgs(string[] args)
+        {
+            for (var i = 0; i < args.Length; i++)
+            {
+                switch (args[i].ToLowerInvariant())
+                {
+                    case "-?":
+                        Console.WriteLine("Options:");
+                        Console.WriteLine("-?                 Show options.");
+                        Console.WriteLine("-d [path_to_dll]   Specify DLL to extract resources from.");
+                        Console.WriteLine("-j [path_to_json]  Specify JSON file to store resources in.");
+                        Console.WriteLine("-t                 Test only; don't update json file.");
+                        Environment.Exit(0);
+                        break;
+                    case "-d":
+                        i++;
+                        if (i >= args.Length)
+                        {
+                            Console.WriteLine("Missing DLL file name; exiting");
+                            Environment.Exit(-1);
+                        }
+                        TZResDLL = args[i];
+                        if (!File.Exists(TZResDLL))
+                        {
+                            Console.WriteLine("Bad DLL file name; exiting");
+                            Environment.Exit(-1);
+                        }
+                        break;
+                    case "-j":
+                        i++;
+                        if (i >= args.Length)
+                        {
+                            Console.WriteLine("Missing JSON file name; exiting");
+                            Environment.Exit(-1);
+                        }
+                        OutputFile = args[i];
+                        break;
+                    case "-t":
+                        WriteOutput = false;
+                        break;
+                    default:
+                        Console.WriteLine($"Invalid option: {args[i]}; exiting");
+                        Environment.Exit(-1);
+                        break;
+                }
+            }
+        }
+
+        private static bool ReadJsonFile(string fileName)
+        {
+            if (!File.Exists(fileName))
+                return false;
+
             try
             {
-                IntPtr module = LoadLibraryEx(@"C:\windows\system32\tzres.dll", IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
-                if (module == IntPtr.Zero) throw new Win32Exception();
-                if (!EnumResourceNames(module, (IntPtr)RT_STRING, new EnumResNameProc(EnumNamesFunc), IntPtr.Zero))
-                    throw new Win32Exception();
+                var json = File.ReadAllText(fileName, Encoding.UTF8);
+                var toplevel = JsonConvert.DeserializeObject<JsonFileTopLevel>(json);
+                toplevel.Languages.ForEach(lang => Languages.Add(lang.LCID, lang));
             }
-            catch (Win32Exception ex)
+            catch
             {
-                Console.WriteLine(ex.Message);
-            }
-            Console.ReadLine();
-        }
-
-        static bool EnumNamesFunc(IntPtr hModule, IntPtr type, IntPtr name, IntPtr lp)
-        {
-            long idorname = (long)name;
-            string sname;
-            if (idorname >> 16 == 0) sname = string.Format("#{0}", idorname);
-            else sname = Marshal.PtrToStringAnsi(name);
-
-            Console.WriteLine($"RT_STRING {sname}:");
-
-            if (!EnumResourceLanguages(hModule, type, name, new EnumResLangProc(EnumLanguagesFunc), IntPtr.Zero))
-                throw new Win32Exception();
-
-            return true;
-        }
-
-        private static bool EnumLanguagesFunc(IntPtr hModule, IntPtr type, IntPtr name, ushort wLang, IntPtr lp)
-        {
-            var nBundle = (uint)name;
-            var min = (nBundle - 1) * 16;
-            var max = nBundle * 16;
-
-            var hrsrc = FindResourceEx(hModule, (IntPtr)RT_STRING, (IntPtr)nBundle, wLang);
-            if (hrsrc == IntPtr.Zero)
-                throw new Win32Exception();
-
-            var hglob = LoadResource(hModule, hrsrc);
-            if (hglob == IntPtr.Zero)
-                throw new Win32Exception();
-
-            var pwsz = LockResource(hglob);
-            if (pwsz == IntPtr.Zero)
-                throw new Win32Exception();
-
-            for (var uId = min; uId < max; uId++)
-            {
-                var len = Marshal.ReadInt16(pwsz);
-                if (len != 0)
-                {
-                    var str = Marshal.PtrToStringUni(pwsz + 2, len);
-                    Console.WriteLine($"  STRING {wLang} {uId}={str}");
-                }
-                pwsz += 2 * (1 + len);
+                Console.WriteLine($"Could not read JSON file {fileName}; exiting.");
+                Environment.Exit(-1);
             }
 
             return true;
         }
 
-        const int RT_STRING = 6;
-        const int LOAD_LIBRARY_AS_DATAFILE = 2;
+        private static void WriteJsonFile(string fileName)
+        {
+            var toplevel = new JsonFileTopLevel
+            {
+                Languages = Languages.Values.OrderBy(l => l.LCID).ToList()
+            };
+            var json = JsonConvert.SerializeObject(toplevel);
+            File.WriteAllText(fileName, json, Encoding.UTF8);
+        }
 
-        public delegate bool EnumResNameProc(IntPtr hModule, IntPtr type, IntPtr name, IntPtr lp);
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public extern static bool EnumResourceNames(IntPtr hModule, IntPtr type, EnumResNameProc lpEnumFunc, IntPtr lp);
-        public delegate bool EnumResLangProc(IntPtr hModule, IntPtr type, IntPtr name, ushort wLang, IntPtr lp);
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern bool EnumResourceLanguages(IntPtr hModule, IntPtr type, IntPtr name, EnumResLangProc lpEnumFunc, IntPtr lp);
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern IntPtr FindResourceEx(IntPtr hModule, IntPtr type, IntPtr name, ushort wLang);
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public static extern IntPtr LoadResource(IntPtr hModule, IntPtr hResInfo);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern IntPtr LockResource(IntPtr hResData);
-
-        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        public extern static IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, int dwFlags);
+        class JsonFileTopLevel
+        {
+            public List<Language> Languages { get; set; }
+        }
     }
 }
