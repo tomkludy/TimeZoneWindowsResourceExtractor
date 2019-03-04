@@ -111,7 +111,15 @@ namespace TZResScraper
 
         private static void WriteJsonFile(string fileName)
         {
-            var toplevel = Languages.Values.ToDictionary(l => l.Name, l => l.TimeZones);
+            var toplevel = new
+            {
+                Languages = Languages.Values.Select(l => new
+                {
+                    Locale = l.Name,
+                    l.TimeZones
+                }),
+            };
+
             var json = JsonConvert.SerializeObject(toplevel, Formatting.Indented);
             File.WriteAllText(fileName, json, Encoding.UTF8);
         }
