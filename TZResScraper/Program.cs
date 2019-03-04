@@ -22,15 +22,6 @@ namespace TZResScraper
             Console.WriteLine($"Resource DLL: {TZResDLL}");
             Console.WriteLine($"Resource JSON: {OutputFile}");
 
-            if (ReadJsonFile(OutputFile))
-            {
-                Console.WriteLine($"Read {Languages.Count} languages from {OutputFile}");
-            }
-            else
-            {
-                Console.WriteLine("JSON file does not exist");
-            }
-
             var extractor = new ResourceExtractor(Languages);
             extractor.Extract(TZResDLL);
 
@@ -49,39 +40,19 @@ namespace TZResScraper
                 // first place it was found.
                 .ToDictionary(g => g.Key, g => g.First().Key);
 
-            bool changed = false;
-
             foreach (var lang in Languages.Values.OrderBy(l => l.LCID))
             {
                 string fix(string str) =>
                     string.IsNullOrEmpty(str) ? str : lang.StringTable[reverse_lookup[str]];
                 foreach (var tz in tzs)
                 {
-                    var tzi = new TimeZoneInfoEx
-                    {
-                        BaseUtcOffsetMinutes = (int)tz.BaseUtcOffset.TotalMinutes,
-                        DaylightName = fix(tz.DaylightName),
-                        DisplayName = fix(tz.DisplayName),
-                        Id = tz.Id,
-                        StandardName = fix(tz.StandardName),
-                        SupportsDaylightSavingTime = tz.SupportsDaylightSavingTime,
-                    };
-
-                    if (!lang.TimeZones.ContainsKey(tzi.Id) || !lang.TimeZones[tzi.Id].Equals(tzi))
-                    {
-                        lang.TimeZones[tzi.Id] = tzi;
-                        changed = true;
-                    }
+                    lang.TimeZones[tz.Id] = fix(tz.DisplayName);
                 }
             }
 
-            if (!changed)
+            if (!WriteOutput)
             {
-                Console.WriteLine("No changes found; nothing to write.");
-            }
-            else if (!WriteOutput)
-            {
-                Console.WriteLine("Changes found, but not writing output based on '-t' option.");
+                Console.WriteLine($"{Languages.Count} languages found, but not writing output based on '-t' option.");
             }
             else
             {
@@ -138,41 +109,11 @@ namespace TZResScraper
             }
         }
 
-        private static bool ReadJsonFile(string fileName)
-        {
-            if (!File.Exists(fileName))
-                return false;
-
-            try
-            {
-                var json = File.ReadAllText(fileName, Encoding.UTF8);
-                var toplevel = JsonConvert.DeserializeObject<JsonFileTopLevel>(json);
-                toplevel.Languages.ForEach(lang => Languages.Add(lang.LCID, lang));
-            }
-            catch
-            {
-                Console.WriteLine($"Could not read JSON file {fileName}; exiting.");
-                Environment.Exit(-1);
-            }
-
-            return true;
-        }
-
         private static void WriteJsonFile(string fileName)
         {
-            var toplevel = new JsonFileTopLevel
-            {
-                LastUpdateTime = DateTime.Now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ssZ"),
-                Languages = Languages.Values.OrderBy(l => l.LCID).ToList()
-            };
+            var toplevel = Languages.Values.ToDictionary(l => l.Name, l => l.TimeZones);
             var json = JsonConvert.SerializeObject(toplevel, Formatting.Indented);
             File.WriteAllText(fileName, json, Encoding.UTF8);
-        }
-
-        class JsonFileTopLevel
-        {
-            public string LastUpdateTime { get; set; }
-            public List<Language> Languages { get; set; }
         }
     }
 }

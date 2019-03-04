@@ -13,5 +13,5 @@ The program has a couple of options:
 |------|------|
 |`-?`|print options on the terminal.|
 |`-d [path_to_dll]`|point to the `tzres.dll` file; you should never need to change this.|
-|`-r [path_to_json]`|point to the `tzres.json` file which is used for both input and output.  If the file does not exist it will be created.  If the file does exist, it will be read and used as the baseline to determine if any time zone info has changed since the last run.|
+|`-r [path_to_json]`|point to the `tzres.json` file which is output.  If the file exists, it will be overwritten.|
 |`-t`|test only; don't write the output file.|
