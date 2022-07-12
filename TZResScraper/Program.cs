@@ -1,21 +1,27 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+
+// ReSharper disable StringLiteralTypo
 
 namespace TZResScraper
 {
-    partial class Program
+    public class Program
     {
-        readonly static Dictionary<ushort, Language> Languages = new Dictionary<ushort, Language>();
-        static string TZResDLL = @"C:\windows\system32\tzres.dll";
-        static string OutputFile = "tzinfo.json";
-        static bool WriteOutput = true;
+        // ReSharper disable once InconsistentNaming
+        private static readonly Dictionary<ushort, Language> Languages = new();
+        // ReSharper disable once InconsistentNaming
+        private static string TZResDLL = @"C:\windows\system32\tzres.dll";
+        // ReSharper disable once InconsistentNaming
+        private static string OutputFile = "tzinfo.json";
+        // ReSharper disable once InconsistentNaming
+        private static bool WriteOutput = true;
 
-        static void Main(string[] args)
+        public static void Main(string[] args)
         {
             ParseArgs(args);
 
@@ -28,10 +34,10 @@ namespace TZResScraper
             // Now, match resources with time zone info, building the
             // ultimate windows TZ rosetta stone
             var tzs = TimeZoneInfo.GetSystemTimeZones();
-            var mylang = Languages[(ushort)CultureInfo.InstalledUICulture.LCID];
+            var myLang = Languages[(ushort)CultureInfo.InstalledUICulture.LCID];
 
             // Create a reverse lookup table, while coalescing duplicate values.
-            var reverse_lookup = mylang.StringTable
+            var reverseLookup = myLang.StringTable
                 .GroupBy(kvp => kvp.Value)
 
                 // group key is now the string in OS language;
@@ -42,11 +48,11 @@ namespace TZResScraper
 
             foreach (var lang in Languages.Values.OrderBy(l => l.LCID))
             {
-                string fix(string str) =>
-                    string.IsNullOrEmpty(str) ? str : lang.StringTable[reverse_lookup[str]];
+                string Fix(string str) =>
+                    string.IsNullOrEmpty(str) ? str : lang.StringTable[reverseLookup[str]];
                 foreach (var tz in tzs)
                 {
-                    lang.TimeZones[tz.Id] = fix(tz.DisplayName);
+                    lang.TimeZones[tz.Id] = Fix(tz.DisplayName);
                 }
             }
 
@@ -111,7 +117,7 @@ namespace TZResScraper
 
         private static void WriteJsonFile(string fileName)
         {
-            var toplevel = new
+            var topLevel = new
             {
                 Languages = Languages.Values.Select(l => new
                 {
@@ -120,7 +126,7 @@ namespace TZResScraper
                 }),
             };
 
-            var json = JsonConvert.SerializeObject(toplevel, Formatting.Indented);
+            var json = JsonSerializer.Serialize(topLevel, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(fileName, json, Encoding.UTF8);
         }
     }

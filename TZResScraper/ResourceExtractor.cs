@@ -6,8 +6,9 @@ using System.Text;
 
 namespace TZResScraper
 {
-    class ResourceExtractor
+    internal class ResourceExtractor
     {
+        // ReSharper disable once InconsistentNaming
         private readonly Dictionary<ushort, Language> Languages;
 
         public ResourceExtractor(Dictionary<ushort, Language> languages)
@@ -19,9 +20,9 @@ namespace TZResScraper
         {
             try
             {
-                IntPtr module = LoadLibraryEx(dll, IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
+                var module = LoadLibraryEx(dll, IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
                 if (module == IntPtr.Zero) throw new Win32Exception();
-                if (!EnumResourceNames(module, (IntPtr)RT_STRING, new EnumResNameProc(EnumNamesFunc), IntPtr.Zero))
+                if (!EnumResourceNames(module, (IntPtr)RT_STRING, EnumNamesFunc, IntPtr.Zero))
                     throw new Win32Exception();
                 return true;
             }
@@ -34,14 +35,14 @@ namespace TZResScraper
 
         private bool EnumNamesFunc(IntPtr hModule, IntPtr type, IntPtr name, IntPtr lp)
         {
-            long idorname = (long)name;
-            string sname;
-            if (idorname >> 16 == 0) sname = string.Format("#{0}", idorname);
-            else sname = Marshal.PtrToStringAnsi(name);
+            //var idOrName = (long)name;
+            //string? sName;
+            //if (idOrName >> 16 == 0) sName = $"#{idOrName}";
+            //else sName = Marshal.PtrToStringAnsi(name);
+            //
+            //Console.WriteLine($"RT_STRING {sName}:");
 
-            //Console.WriteLine($"RT_STRING {sname}:");
-
-            if (!EnumResourceLanguages(hModule, type, name, new EnumResLangProc(EnumLanguagesFunc), IntPtr.Zero))
+            if (!EnumResourceLanguages(hModule, type, name, EnumLanguagesFunc, IntPtr.Zero))
                 throw new Win32Exception();
 
             return true;
@@ -53,29 +54,29 @@ namespace TZResScraper
             var min = (nBundle - 1) * 16;
             var max = nBundle * 16;
 
-            var hrsrc = FindResourceEx(hModule, (IntPtr)RT_STRING, (IntPtr)nBundle, wLang);
-            if (hrsrc == IntPtr.Zero)
+            var hRSrc = FindResourceEx(hModule, (IntPtr)RT_STRING, (IntPtr)nBundle, wLang);
+            if (hRSrc == IntPtr.Zero)
                 throw new Win32Exception();
 
-            var hglob = LoadResource(hModule, hrsrc);
-            if (hglob == IntPtr.Zero)
+            var hGlob = LoadResource(hModule, hRSrc);
+            if (hGlob == IntPtr.Zero)
                 throw new Win32Exception();
 
-            var pwsz = LockResource(hglob);
-            if (pwsz == IntPtr.Zero)
+            var pwSz = LockResource(hGlob);
+            if (pwSz == IntPtr.Zero)
                 throw new Win32Exception();
 
             for (var uId = min; uId < max; uId++)
             {
-                var len = Marshal.ReadInt16(pwsz);
+                var len = Marshal.ReadInt16(pwSz);
                 if (len != 0)
                 {
-                    var str = Marshal.PtrToStringUni(pwsz + 2, len);
+                    var str = Marshal.PtrToStringUni(pwSz + 2, len);
                     //Console.WriteLine($"  STRING {wLang} {uId}={str}");
 
                     AddString(wLang, uId, str);
                 }
-                pwsz += 2 * (1 + len);
+                pwSz += 2 * (1 + len);
             }
 
             return true;
@@ -98,13 +99,17 @@ namespace TZResScraper
             lang.StringTable[uId] = str;
         }
 
+        // ReSharper disable once InconsistentNaming
         private const int RT_STRING = 6;
+        // ReSharper disable once InconsistentNaming
         private const int LOAD_LIBRARY_AS_DATAFILE = 2;
+        // ReSharper disable once InconsistentNaming
+        // ReSharper disable once IdentifierTypo
         private const uint LOCALE_SNAME = 0x0000005c;
 
         private delegate bool EnumResNameProc(IntPtr hModule, IntPtr type, IntPtr name, IntPtr lp);
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private extern static bool EnumResourceNames(IntPtr hModule, IntPtr type, EnumResNameProc lpEnumFunc, IntPtr lp);
+        private static extern bool EnumResourceNames(IntPtr hModule, IntPtr type, EnumResNameProc lpEnumFunc, IntPtr lp);
         private delegate bool EnumResLangProc(IntPtr hModule, IntPtr type, IntPtr name, ushort wLang, IntPtr lp);
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool EnumResourceLanguages(IntPtr hModule, IntPtr type, IntPtr name, EnumResLangProc lpEnumFunc, IntPtr lp);
@@ -117,9 +122,9 @@ namespace TZResScraper
         private static extern IntPtr LockResource(IntPtr hResData);
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private extern static IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, int dwFlags);
+        private static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, int dwFlags);
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern int GetLocaleInfo(uint Locale, uint LCType, StringBuilder lpLCData, int cchData);
+        private static extern int GetLocaleInfo(uint locale, uint lcType, StringBuilder lpLcData, int cchData);
     }
 }
