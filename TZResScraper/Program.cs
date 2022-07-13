@@ -4,7 +4,9 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 
 // ReSharper disable StringLiteralTypo
 
@@ -126,7 +128,11 @@ namespace TZResScraper
                 }),
             };
 
-            var json = JsonSerializer.Serialize(topLevel, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(topLevel, new JsonSerializerOptions
+            {
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                WriteIndented = true
+            });
             File.WriteAllText(fileName, json, Encoding.UTF8);
         }
     }
